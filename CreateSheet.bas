@@ -9,6 +9,13 @@ Function BersihkanNamaSheet(ByVal nama As String) As String
     BersihkanNamaSheet = nama
 End Function
 
+' Helper function untuk validasi numeric
+Function IsNumericValue(ByVal val As Variant) As Boolean
+    On Error Resume Next
+    IsNumericValue = Not IsError(CDbl(val))
+    On Error GoTo 0
+End Function
+
 ' Mengonversi detik ke format teks (0j 0m 0s)
 Function FormatDurasi(ByVal totalDetik As Long) As String
     Dim h As Long, m As Long, s As Long
@@ -31,11 +38,20 @@ Function HitungKeteranganWaktu(ByVal jamLog As Date, ByVal tgl As Date, ByVal st
     Dim selisih As Long
     Const BATAS_ERROR As Long = 10800 ' 3 Jam
     
+    ' Validasi input
+    On Error Resume Next
     hariID = Weekday(tgl, vbMonday)
-    status = UCase(status)
+    status = UCase(Trim(status))
+    On Error GoTo 0
+    
+    ' Default return empty jika status tidak valid
+    If Len(status) = 0 Then
+        HitungKeteranganWaktu = ""
+        Exit Function
+    End If
     
     ' --- LOGIKA MASUK (IN) ---
-    If status Like "*IN*" Then
+    If InStr(status, "IN") > 0 Then
         If hariID = 5 Then
             jamAcuan = TimeValue("07:00:00")
         Else
@@ -54,7 +70,7 @@ Function HitungKeteranganWaktu(ByVal jamLog As Date, ByVal tgl As Date, ByVal st
         End If
         
     ' --- LOGIKA PULANG (OUT) ---
-    ElseIf status Like "*OUT*" Then
+    ElseIf InStr(status, "OUT") > 0 Then
         ' Menentukan Jam Acuan Berdasarkan Hari
         Select Case hariID
             Case 5 ' Jumat
@@ -84,6 +100,8 @@ Sub PisahAbsensi()
     Dim lastRow As Long, i As Long, r As Long
     Dim currentKey As Variant
     
+    On Error GoTo ErrorHandler
+    
     Set wsMaster = ThisWorkbook.ActiveSheet
     Set dict = CreateObject("Scripting.Dictionary")
     lastRow = wsMaster.Cells(wsMaster.Rows.Count, 2).End(xlUp).Row
@@ -102,7 +120,7 @@ Sub PisahAbsensi()
         ' Kelola Sheet
         On Error Resume Next
         Application.DisplayAlerts = False: Sheets(CStr(currentKey)).Delete: Application.DisplayAlerts = True
-        On Error GoTo 0
+        On Error GoTo ErrorHandler
         
         Set wsNew = Sheets.Add(After:=Sheets(Sheets.Count))
         wsNew.Name = CStr(currentKey)
@@ -115,7 +133,7 @@ Sub PisahAbsensi()
         ' Perhitungan Baris
         Dim rowCount As Long: rowCount = wsNew.Cells(wsNew.Rows.Count, 1).End(xlUp).Row
         For r = 2 To rowCount
-            If IsDate(wsNew.Cells(r, 1)) And IsNumeric(wsNew.Cells(r, 3)) Then
+            If IsDate(wsNew.Cells(r, 1)) And IsNumericValue(wsNew.Cells(r, 3)) Then
                 wsNew.Cells(r, 6).Value = HitungKeteranganWaktu(wsNew.Cells(r, 3).Value, _
                                                                wsNew.Cells(r, 1).Value, _
                                                                wsNew.Cells(r, 4).Value)
@@ -130,4 +148,9 @@ Sub PisahAbsensi()
     wsMaster.AutoFilterMode = False
     Application.ScreenUpdating = True
     MsgBox "Selesai!", vbInformation
+    Exit Sub
+    
+ErrorHandler:
+    Application.ScreenUpdating = True
+    MsgBox "Error " & Err.Number & ": " & Err.Description, vbCritical
 End Sub
